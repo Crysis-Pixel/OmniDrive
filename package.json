@@ -1,0 +1,35 @@
+{
+  "name": "omnidrive",
+  "version": "1.0.0",
+  "description": "Unified virtual filesystem across multiple Google Drive accounts",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@omnidrive/shared && npm run build --workspace=@omnidrive/api && npm run build --workspace=@omnidrive/worker && npm run build --workspace=@omnidrive/web",
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=@omnidrive/api",
+    "dev:web": "npm run dev --workspace=@omnidrive/web",
+    "dev:worker": "npm run dev --workspace=@omnidrive/worker",
+    "start": "npm run start --workspace=@omnidrive/api",
+    "start:worker": "npm run start --workspace=@omnidrive/worker",
+    "prisma:generate": "npm run prisma:generate --workspace=@omnidrive/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=@omnidrive/api",
+    "prisma:deploy": "npm run prisma:deploy --workspace=@omnidrive/api",
+    "test": "npm run test --workspaces --if-present",
+    "render-build": "npm run build"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "google-drive",
+    "virtual-filesystem",
+    "cloud-storage",
+    "omnidrive"
+  ],
+  "author": "OmniDrive",
+  "license": "MIT"
+}

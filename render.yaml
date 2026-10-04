@@ -1,0 +1,88 @@
+services:
+  # --------------------------------------------------------------------------
+  # 1. OmniDrive Full-Stack Web Service (Fastify API + React Frontend)
+  # --------------------------------------------------------------------------
+  - type: web
+    name: omnidrive-app
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run build
+    preDeployCommand: npm run prisma:deploy
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SERVE_STATIC
+        value: "true"
+      - key: IN_PROCESS_WORKER
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omnidrive-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: omnidrive-redis
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_SCOPES
+        value: "https://www.googleapis.com/auth/drive"
+      - key: ENABLE_DEMO_ACCOUNTS
+        value: "true"
+
+  # --------------------------------------------------------------------------
+  # 2. Optional Dedicated Background Worker (For high-scale transfers)
+  # --------------------------------------------------------------------------
+  - type: worker
+    name: omnidrive-worker
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omnidrive-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: omnidrive-redis
+          property: connectionString
+      - key: TOKEN_ENCRYPTION_KEY
+        fromService:
+          type: web
+          name: omnidrive-app
+          envVarKey: TOKEN_ENCRYPTION_KEY
+
+databases:
+  # --------------------------------------------------------------------------
+  # Render PostgreSQL Database
+  # --------------------------------------------------------------------------
+  - name: omnidrive-postgres
+    plan: starter
+    region: oregon
+    databaseName: omnidrive
+    user: omnidrive_user
+
+# --------------------------------------------------------------------------
+# Render Redis / KeyDB Cache & Queue
+# --------------------------------------------------------------------------
+# Note: Render Redis service definition

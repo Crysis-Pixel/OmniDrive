@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-950 text-slate-100 antialiased selection:bg-brand-500 selection:text-white font-sans;
+  }
+
+  /* Custom Sleek Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-surface-900/70 backdrop-blur-xl border border-slate-800/80 shadow-glass;
+  }
+  .glass-card {
+    @apply bg-surface-900/50 backdrop-blur-md border border-slate-800/60 hover:border-brand-500/40 transition-all duration-200;
+  }
+  .glass-modal {
+    @apply bg-surface-900/90 backdrop-blur-2xl border border-slate-800 shadow-2xl;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-medium shadow-glow-sm hover:shadow-glow transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-surface-800 hover:bg-slate-700 text-slate-200 font-medium border border-slate-700/60 hover:border-slate-600 transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-surface-800/80 transition-colors active:scale-[0.98];
+  }
+}

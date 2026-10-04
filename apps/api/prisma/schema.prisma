@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  passwordHash String?
+  createdAt    DateTime        @default(now())
+  accounts     LinkedAccount[]
+  settings     UserSettings?
+  transfers    TransferJob[]
+}
+
+model UserSettings {
+  userId          String   @id
+  uploadStrategy  String   @default("most_free") // manual | most_free | fill_first
+  accountPriority String[] // ordered accountIds for fill_first
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LinkedAccount {
+  id                String     @id @default(cuid())
+  userId            String
+  googleId          String
+  email             String
+  displayName       String?
+  avatarUrl         String?
+  label             String? // user-editable alias
+  refreshTokenEnc   Bytes
+  refreshTokenIv    Bytes
+  refreshTokenTag   Bytes
+  scopes            String[]
+  status            String     @default("active") // active | needs_reauth | disabled
+  changesPageToken  String?
+  lastSyncAt        DateTime?
+  quotaLimit        BigInt?
+  quotaUsage        BigInt?
+  quotaUsageInDrive BigInt?
+  quotaUsageInTrash BigInt?
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files             FileNode[]
+
+  @@unique([userId, googleId])
+  @@index([userId])
+}
+
+model FileNode {
+  id             String        @id @default(cuid())
+  accountId      String
+  driveId        String
+  parentDriveId  String?
+  name           String
+  mimeType       String
+  size           BigInt?
+  md5            String?
+  modifiedTime   DateTime
+  trashed        Boolean       @default(false)
+  isFolder       Boolean
+  shortcutTarget String?
+  headRevisionId String?
+  thumbnailLink  String?
+  webViewLink    String?
+  syncedAt       DateTime      @default(now())
+  account        LinkedAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, driveId])
+  @@index([accountId, parentDriveId])
+  @@index([name])
+}
+
+model TransferJob {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String // copy | move
+  srcAccount  String
+  srcDriveId  String
+  dstAccount  String
+  dstParentId String
+  status      String // queued | running | done | failed | cancelled
+  bytesTotal  BigInt?
+  bytesDone   BigInt   @default(0)
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
