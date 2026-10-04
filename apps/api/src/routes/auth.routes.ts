@@ -6,7 +6,7 @@ import { authService } from '../services/auth.service';
 import { requireAuth } from '../middleware/auth.middleware';
 import { db } from '../db';
 import { config } from '../config';
-import { oauthStates } from './accounts.routes';
+import { oauthStates, getOAuthRedirectUri } from './accounts.routes';
 
 export async function authRoutes(fastify: FastifyInstance) {
   // POST /api/auth/register
@@ -120,7 +120,7 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // GET /api/auth/google - Initiate Google Sign-In / Sign-Up
-  fastify.get('/google', async () => {
+  fastify.get('/google', async (req) => {
     if (!config.GOOGLE_CLIENT_ID || !config.GOOGLE_CLIENT_SECRET) {
       return {
         url: null,
@@ -129,14 +129,15 @@ export async function authRoutes(fastify: FastifyInstance) {
       };
     }
 
+    const redirectUri = getOAuthRedirectUri(req);
     const oauth2Client = new google.auth.OAuth2(
       config.GOOGLE_CLIENT_ID,
       config.GOOGLE_CLIENT_SECRET,
-      config.GOOGLE_REDIRECT_URI
+      redirectUri
     );
 
     const state = `login_${crypto.randomBytes(24).toString('hex')}`;
-    oauthStates.set(state, { isLogin: true, timestamp: Date.now() });
+    oauthStates.set(state, { isLogin: true, redirectUri, timestamp: Date.now() });
 
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',

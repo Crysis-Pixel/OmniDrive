@@ -13,11 +13,26 @@ import { invalidateDriveClient } from '../services/drive/drive.factory';
 export interface OAuthStateData {
   userId?: string;
   isLogin?: boolean;
+  redirectUri?: string;
   timestamp: number;
 }
 
 // In-memory OAuth state cache (maps state -> stateData)
 export const oauthStates = new Map<string, OAuthStateData>();
+
+export function getOAuthRedirectUri(req: any): string {
+  // If explicitly configured in environment to a non-localhost URL, prefer that
+  if (config.GOOGLE_REDIRECT_URI && !config.GOOGLE_REDIRECT_URI.includes('localhost')) {
+    return config.GOOGLE_REDIRECT_URI;
+  }
+  // Dynamic resolution from request headers (works on Render, custom domains, etc.)
+  const proto = (req.headers && req.headers['x-forwarded-proto']) || req.protocol || 'https';
+  const host = (req.headers && req.headers['x-forwarded-host']) || (req.headers && req.headers.host);
+  if (host && !host.includes('localhost')) {
+    return `${proto}://${host}/api/accounts/callback`;
+  }
+  return config.GOOGLE_REDIRECT_URI || `${proto}://${host}/api/accounts/callback`;
+}
 
 export async function accountsRoutes(fastify: FastifyInstance) {
   // GET /api/accounts - List user's linked accounts
@@ -65,14 +80,15 @@ export async function accountsRoutes(fastify: FastifyInstance) {
       };
     }
 
+    const redirectUri = getOAuthRedirectUri(req);
     const oauth2Client = new google.auth.OAuth2(
       config.GOOGLE_CLIENT_ID,
       config.GOOGLE_CLIENT_SECRET,
-      config.GOOGLE_REDIRECT_URI
+      redirectUri
     );
 
     const state = crypto.randomBytes(24).toString('hex');
-    oauthStates.set(state, { userId: req.user!.id, timestamp: Date.now() });
+    oauthStates.set(state, { userId: req.user!.id, redirectUri, timestamp: Date.now() });
 
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
@@ -110,10 +126,11 @@ export async function accountsRoutes(fastify: FastifyInstance) {
     oauthStates.delete(state);
 
     try {
+      const redirectUri = stateData.redirectUri || getOAuthRedirectUri(req);
       const oauth2Client = new google.auth.OAuth2(
         config.GOOGLE_CLIENT_ID,
         config.GOOGLE_CLIENT_SECRET,
-        config.GOOGLE_REDIRECT_URI
+        redirectUri
       );
 
       const { tokens } = await oauth2Client.getToken(code!);
