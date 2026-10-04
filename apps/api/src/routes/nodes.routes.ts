@@ -396,13 +396,17 @@ export async function nodesRoutes(fastify: FastifyInstance) {
 
     if (isPermanent) {
       await client.deletePermanently(driveId);
-      await db.fileNode.deleteMany({ where: { accountId, driveId } });
+      await db.fileNode.deleteMany({ where: { accountId, driveId } }).catch(() => {});
     } else {
       await client.trashFile(driveId);
-      await db.fileNode.update({
-        where: { accountId_driveId: { accountId, driveId } },
-        data: { trashed: true },
-      });
+      try {
+        await db.fileNode.update({
+          where: { accountId_driveId: { accountId, driveId } },
+          data: { trashed: true },
+        });
+      } catch (err) {
+        console.warn('Could not update fileNode trashed state in DB:', err);
+      }
     }
 
     return { success: true, permanent: isPermanent };
@@ -425,12 +429,15 @@ export async function nodesRoutes(fastify: FastifyInstance) {
     const client = await getDriveClient(accountId);
     await client.restoreFile(driveId);
 
-    const updated = await db.fileNode.update({
-      where: { accountId_driveId: { accountId, driveId } },
-      data: { trashed: false },
-    });
-
-    return { node: toDTO(updated, account) };
+    try {
+      const updated = await db.fileNode.update({
+        where: { accountId_driveId: { accountId, driveId } },
+        data: { trashed: false },
+      });
+      return { node: toDTO(updated, account) };
+    } catch {
+      return { success: true, restored: true };
+    }
   });
 
   // GET /api/trash - List trashed files across all accounts

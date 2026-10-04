@@ -12,8 +12,10 @@ import {
 import { useUIStore } from '../../store/useUIStore';
 import { isGoogleDoc } from '@omnidrive/shared';
 import { api } from '../../api/endpoints';
+import { useQueryClient } from '@tanstack/react-query';
 
 export const ContextMenu: React.FC = () => {
+  const queryClient = useQueryClient();
   const {
     activeContextMenu,
     setContextMenu,
@@ -131,11 +133,19 @@ export const ContextMenu: React.FC = () => {
       </button>
 
       <button
-        onClick={() => {
+        onClick={async () => {
           setContextMenu(null);
-          api.nodes.delete(node.id).then(() => {
-            window.dispatchEvent(new CustomEvent('omnidrive:refresh'));
-          });
+          try {
+            await api.nodes.delete(node.id);
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['nodes'] }),
+              queryClient.invalidateQueries({ queryKey: ['trash'] }),
+              queryClient.invalidateQueries({ queryKey: ['storage-summary'] }),
+            ]);
+          } catch (err: any) {
+            console.error('Failed to move to trash:', err);
+            alert(err.message || 'Failed to move to trash');
+          }
         }}
         className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/15 rounded-xl transition-colors"
       >

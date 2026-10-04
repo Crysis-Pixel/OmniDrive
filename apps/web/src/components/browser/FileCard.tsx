@@ -31,9 +31,13 @@ export const FileCard: React.FC<FileCardProps> = ({ node, isSelected, onOpen }) 
       onDragStart={handleDragStart}
       onClick={(e) => {
         e.stopPropagation();
-        selectNode(node.id, e.ctrlKey || e.metaKey || e.shiftKey);
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
+          selectNode(node.id, true);
+        } else {
+          selectNode(node.id, false);
+          onOpen(node);
+        }
       }}
-      onDoubleClick={() => onOpen(node)}
       onContextMenu={handleContextMenu}
       className={`group relative p-4 rounded-2xl border transition-all duration-200 select-none cursor-pointer flex flex-col justify-between ${
         isSelected

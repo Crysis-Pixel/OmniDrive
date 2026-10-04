@@ -361,8 +361,25 @@ class MemoryStore {
           }
         }
       }
-      const f = this._fileNodes.get(targetId);
-      if (!f) throw new Error('FileNode not found');
+      const f = targetId ? this._fileNodes.get(targetId) : null;
+      if (!f) {
+        const id = targetId || `fn_${Date.now()}_${this.idCounter++}`;
+        const newRecord = {
+          id,
+          accountId: where.accountId_driveId?.accountId || where.accountId || '',
+          driveId: where.accountId_driveId?.driveId || where.driveId || '',
+          name: 'Item',
+          mimeType: 'application/octet-stream',
+          isFolder: false,
+          size: null,
+          modifiedTime: new Date(),
+          trashed: data.trashed ?? true,
+          syncedAt: new Date(),
+        };
+        this._fileNodes.set(id, newRecord);
+        this.saveToDisk();
+        return newRecord;
+      }
       const updated = { ...f, ...data, syncedAt: new Date() };
       if (data.size !== undefined) updated.size = data.size !== null ? BigInt(data.size) : null;
       this._fileNodes.set(targetId, updated);

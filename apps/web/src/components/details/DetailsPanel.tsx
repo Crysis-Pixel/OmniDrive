@@ -1,10 +1,13 @@
 import React from 'react';
-import { X, Download, Eye, ExternalLink, HardDrive, Calendar, FileText, Hash, ShieldCheck } from 'lucide-react';
+import { X, Download, Eye, ExternalLink, HardDrive, Calendar, FileText, Hash, ShieldCheck, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { formatBytes, formatDate, isGoogleDoc, getFileTypeCategory } from '@omnidrive/shared';
 import { FileIcon } from '../common/FileIcon';
+import { useQueryClient } from '@tanstack/react-query';
+import { api } from '../../api/endpoints';
 
 export const DetailsPanel: React.FC = () => {
+  const queryClient = useQueryClient();
   const { isDetailsOpen, setDetailsOpen, selectedFileForDetails, setActiveViewerNode } = useUIStore();
 
   if (!isDetailsOpen || !selectedFileForDetails) return null;
@@ -112,6 +115,29 @@ export const DetailsPanel: React.FC = () => {
             <span>Download File</span>
           </button>
         )}
+
+        <button
+          onClick={async () => {
+            if (confirm(`Move "${node.name}" to trash?`)) {
+              setDetailsOpen(false);
+              try {
+                await api.nodes.delete(node.id);
+                await Promise.all([
+                  queryClient.invalidateQueries({ queryKey: ['nodes'] }),
+                  queryClient.invalidateQueries({ queryKey: ['trash'] }),
+                  queryClient.invalidateQueries({ queryKey: ['storage-summary'] }),
+                ]);
+              } catch (err: any) {
+                console.error('Failed to move to trash:', err);
+                alert(err.message || 'Failed to move to trash');
+              }
+            }
+          }}
+          className="w-full py-2 px-3 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+          <span>Move to Trash</span>
+        </button>
       </div>
     </aside>
   );

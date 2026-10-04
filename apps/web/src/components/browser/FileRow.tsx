@@ -31,9 +31,13 @@ export const FileRow: React.FC<FileRowProps> = ({ node, isSelected, onOpen }) =>
       onDragStart={handleDragStart}
       onClick={(e) => {
         e.stopPropagation();
-        selectNode(node.id, e.ctrlKey || e.metaKey || e.shiftKey);
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
+          selectNode(node.id, true);
+        } else {
+          selectNode(node.id, false);
+          onOpen(node);
+        }
       }}
-      onDoubleClick={() => onOpen(node)}
       onContextMenu={handleContextMenu}
       className={`group select-none cursor-pointer border-b border-slate-800/60 transition-colors ${
         isSelected

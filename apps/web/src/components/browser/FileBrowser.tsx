@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUIStore } from '../../store/useUIStore';
 import { useUploadStore } from '../../store/useUploadStore';
 import { FileNodeDTO, NodeListingResponse } from '@omnidrive/shared';
 import { AccountFolderCard } from './AccountFolderCard';
 import { FileCard } from './FileCard';
 import { FileRow } from './FileRow';
-import { Plus, UploadCloud, FolderOpen, ArrowUpDown } from 'lucide-react';
+import { Plus, UploadCloud, FolderOpen, ArrowUpDown, Trash2 } from 'lucide-react';
 import { api } from '../../api/endpoints';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -26,6 +26,48 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const { viewMode, selectedNodeIds, clearSelection, setActiveViewerNode, openModal } = useUIStore();
   const { addUpload } = useUploadStore();
   const [isDragOver, setIsDragOver] = useState(false);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] });
+      queryClient.invalidateQueries({ queryKey: ['trash'] });
+      queryClient.invalidateQueries({ queryKey: ['storage-summary'] });
+    };
+    window.addEventListener('omnidrive:refresh', handleRefresh);
+    return () => window.removeEventListener('omnidrive:refresh', handleRefresh);
+  }, [queryClient]);
+
+  const handleDeleteSelected = async () => {
+    if (selectedNodeIds.length === 0) return;
+    const count = selectedNodeIds.length;
+    if (confirm(`Move ${count} item${count > 1 ? 's' : ''} to trash?`)) {
+      try {
+        await Promise.all(selectedNodeIds.map((id) => api.nodes.delete(id)));
+        clearSelection();
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['nodes'] }),
+          queryClient.invalidateQueries({ queryKey: ['trash'] }),
+          queryClient.invalidateQueries({ queryKey: ['storage-summary'] }),
+        ]);
+      } catch (err: any) {
+        console.error('Delete failed:', err);
+        alert(err.message || 'Failed to move selected items to trash');
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA';
+      if (!isInput && (e.key === 'Delete' || e.key === 'Backspace') && selectedNodeIds.length > 0) {
+        e.preventDefault();
+        handleDeleteSelected();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNodeIds]);
 
   // Drag and drop upload from desktop
   const handleDragOver = (e: React.DragEvent) => {
@@ -200,6 +242,29 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedNodeIds.length > 0 && !isRoot && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface-900/95 border border-slate-700/80 backdrop-blur-xl shadow-2xl rounded-2xl px-5 py-2.5 flex items-center gap-4 animate-in slide-in-from-bottom duration-150">
+          <span className="text-xs font-semibold text-slate-200">
+            {selectedNodeIds.length} item{selectedNodeIds.length > 1 ? 's' : ''} selected
+          </span>
+          <div className="h-4 w-px bg-slate-700" />
+          <button
+            onClick={handleDeleteSelected}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-medium transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Move to Trash</span>
+          </button>
+          <button
+            onClick={clearSelection}
+            className="px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition-colors"
+          >
+            Deselect
+          </button>
         </div>
       )}
     </div>
