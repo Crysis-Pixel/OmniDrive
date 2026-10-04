@@ -5,7 +5,7 @@ import { createServer } from '../src/server';
 describe('OmniDrive API Integration Suite', () => {
   let app: FastifyInstance;
   let sessionCookie: string;
-  let userEmail = `tester_${Date.now()}@test.com`;
+  let userEmail = `demo_tester_${Date.now()}@test.com`;
   let accounts: any[] = [];
   let rootNodes: any[] = [];
 

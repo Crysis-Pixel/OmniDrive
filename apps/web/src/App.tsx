@@ -12,6 +12,13 @@ export const App: React.FC = () => {
   const { user, isLoading, checkAuth } = useAuthStore();
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      localStorage.setItem('omnidrive_token', token);
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
     checkAuth();
   }, [checkAuth]);
 

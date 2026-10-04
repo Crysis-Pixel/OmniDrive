@@ -6,11 +6,18 @@ import { db } from '../db';
 import { config } from '../config';
 import { encryptToken } from '../services/crypto.service';
 import { syncService } from '../services/sync.service';
+import { authService } from '../services/auth.service';
 import { updateAccountSchema, LinkedAccountDTO } from '@omnidrive/shared';
 import { invalidateDriveClient } from '../services/drive/drive.factory';
 
-// In-memory OAuth state cache (maps state -> userId)
-const oauthStates = new Map<string, { userId: string; timestamp: number }>();
+export interface OAuthStateData {
+  userId?: string;
+  isLogin?: boolean;
+  timestamp: number;
+}
+
+// In-memory OAuth state cache (maps state -> stateData)
+export const oauthStates = new Map<string, OAuthStateData>();
 
 export async function accountsRoutes(fastify: FastifyInstance) {
   // GET /api/accounts - List user's linked accounts
@@ -84,15 +91,22 @@ export async function accountsRoutes(fastify: FastifyInstance) {
   fastify.get('/callback', async (req, reply) => {
     const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
 
+    const getAppRedirect = (pathWithQuery: string) => {
+      if (config.SERVE_STATIC) {
+        return pathWithQuery;
+      }
+      return `${config.APP_URL}${pathWithQuery}`;
+    };
+
     if (error) {
-      return reply.redirect(`${config.APP_URL}/accounts?error=${encodeURIComponent(error)}`);
+      return reply.redirect(getAppRedirect(`/login?error=${encodeURIComponent(error)}`));
     }
 
     if (!state || !oauthStates.has(state)) {
-      return reply.redirect(`${config.APP_URL}/accounts?error=Invalid+or+expired+OAuth+state`);
+      return reply.redirect(getAppRedirect('/login?error=Invalid+or+expired+OAuth+state'));
     }
 
-    const { userId } = oauthStates.get(state)!;
+    const stateData = oauthStates.get(state)!;
     oauthStates.delete(state);
 
     try {
@@ -105,25 +119,116 @@ export async function accountsRoutes(fastify: FastifyInstance) {
       const { tokens } = await oauth2Client.getToken(code!);
       oauth2Client.setCredentials(tokens);
 
-      if (!tokens.refresh_token) {
-        return reply.redirect(`${config.APP_URL}/accounts?error=No+refresh+token+returned.+Please+revoke+app+access+and+try+again.`);
+      const drive = google.drive({ version: 'v3', auth: oauth2Client });
+      
+      let googleId = '';
+      let email = '';
+      let displayName: string | null = null;
+      let avatarUrl: string | null = null;
+      let quotaLimit: string | null = null;
+      let quotaUsage: string | null = null;
+      let quotaUsageInDrive: string | null = null;
+      let quotaUsageInTrash: string | null = null;
+
+      // Extract user info from Drive About API
+      try {
+        const about = await drive.about.get({ fields: 'user, storageQuota' });
+        if (about.data.user) {
+          googleId = about.data.user.permissionId || '';
+          email = about.data.user.emailAddress || '';
+          displayName = about.data.user.displayName || null;
+          avatarUrl = about.data.user.photoLink || null;
+        }
+        if (about.data.storageQuota) {
+          quotaLimit = about.data.storageQuota.limit || null;
+          quotaUsage = about.data.storageQuota.usage || null;
+          quotaUsageInDrive = about.data.storageQuota.usageInDrive || null;
+          quotaUsageInTrash = about.data.storageQuota.usageInDriveTrash || null;
+        }
+      } catch (aboutErr) {
+        console.warn('Failed to fetch drive.about:', aboutErr);
       }
 
-      // Fetch user profile info from Google
-      const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-      const userInfo = await oauth2.userinfo.get();
-      const googleId = userInfo.data.id!;
-      const email = userInfo.data.email!;
-      const displayName = userInfo.data.name || null;
-      const avatarUrl = userInfo.data.picture || null;
+      // If ID token is present, fallback / supplement with JWT payload
+      if (tokens.id_token) {
+        try {
+          const parts = tokens.id_token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+            if (!googleId) googleId = payload.sub || '';
+            if (!email) email = payload.email || '';
+            if (!displayName) displayName = payload.name || null;
+            if (!avatarUrl) avatarUrl = payload.picture || null;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
 
-      // Encrypt refresh token
-      const enc = encryptToken(tokens.refresh_token);
+      // Final fallback: try oauth2 userinfo if still missing
+      if (!email) {
+        try {
+          const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+          const userInfo = await oauth2.userinfo.get();
+          if (userInfo.data.id && !googleId) googleId = userInfo.data.id;
+          if (userInfo.data.email && !email) email = userInfo.data.email;
+          if (userInfo.data.name && !displayName) displayName = userInfo.data.name;
+          if (userInfo.data.picture && !avatarUrl) avatarUrl = userInfo.data.picture;
+        } catch (uiErr) {
+          console.warn('Userinfo fallback failed:', uiErr);
+        }
+      }
+
+      if (!email) {
+        return reply.redirect(getAppRedirect('/accounts?error=Unable+to+retrieve+Google+account+email.+Please+ensure+the+Google+Drive+API+is+enabled+in+Google+Cloud+Console.'));
+      }
+      if (!googleId) {
+        googleId = `g_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      }
+
+      // If user came from Login / Register screen, auto-create or find their user record
+      let userId = stateData.userId;
+      if (stateData.isLogin) {
+        let user = await db.user.findUnique({ where: { email } });
+        if (!user) {
+          user = await db.user.create({
+            data: {
+              email,
+              passwordHash: null,
+              settings: {
+                create: {
+                  uploadStrategy: 'most_free',
+                  accountPriority: [],
+                },
+              },
+            },
+          });
+        }
+        userId = user.id;
+      }
+
+      if (!userId) {
+        return reply.redirect(getAppRedirect('/login?error=User+session+not+found'));
+      }
 
       // Check if account already linked
       const existing = await db.linkedAccount.findFirst({
         where: { userId, googleId },
       });
+
+      let enc = null;
+      if (tokens.refresh_token) {
+        enc = encryptToken(tokens.refresh_token);
+      } else if (existing?.refreshTokenEnc) {
+        // Reuse existing refresh token if re-authorizing
+        enc = {
+          ciphertext: existing.refreshTokenEnc,
+          iv: existing.refreshTokenIv,
+          tag: existing.refreshTokenTag,
+        };
+      } else {
+        return reply.redirect(getAppRedirect('/accounts?error=Google+did+not+return+a+refresh+token.+Please+visit+https://myaccount.google.com/connections,+remove+OmniDrive,+and+link+again.'));
+      }
 
       let accountId: string;
       if (existing) {
@@ -138,6 +243,10 @@ export async function accountsRoutes(fastify: FastifyInstance) {
             refreshTokenTag: enc.tag,
             scopes: config.GOOGLE_SCOPES,
             status: 'active',
+            quotaLimit,
+            quotaUsage,
+            quotaUsageInDrive,
+            quotaUsageInTrash,
           },
         });
         accountId = updated.id;
@@ -154,6 +263,10 @@ export async function accountsRoutes(fastify: FastifyInstance) {
             refreshTokenTag: enc.tag,
             scopes: config.GOOGLE_SCOPES,
             status: 'active',
+            quotaLimit,
+            quotaUsage,
+            quotaUsageInDrive,
+            quotaUsageInTrash,
           },
         });
         accountId = created.id;
@@ -163,9 +276,23 @@ export async function accountsRoutes(fastify: FastifyInstance) {
       invalidateDriveClient(accountId);
       syncService.syncAccount(accountId).catch(console.warn);
 
-      return reply.redirect(`${config.APP_URL}/accounts?success=Account+linked+successfully`);
+      if (stateData.isLogin) {
+        const sessionToken = authService.generateSessionToken(userId, email);
+        reply.setCookie('session_token', sessionToken, {
+          httpOnly: true,
+          secure: config.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 7 * 24 * 60 * 60,
+        });
+
+        return reply.redirect(getAppRedirect(`/?token=${sessionToken}&success=Signed+in+with+Google`));
+      }
+
+      return reply.redirect(getAppRedirect('/accounts?success=Account+linked+successfully'));
     } catch (err: any) {
-      return reply.redirect(`${config.APP_URL}/accounts?error=${encodeURIComponent(err.message || 'OAuth linking failed')}`);
+      const errRedirect = stateData?.isLogin ? '/login' : '/accounts';
+      return reply.redirect(getAppRedirect(`${errRedirect}?error=${encodeURIComponent(err.message || 'OAuth linking failed')}`));
     }
   });
 

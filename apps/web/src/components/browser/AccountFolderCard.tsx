@@ -27,7 +27,7 @@ export const AccountFolderCard: React.FC<AccountFolderCardProps> = ({ node, onOp
 
   return (
     <div
-      onDoubleClick={() => onOpen(node)}
+      onClick={() => onOpen(node)}
       className="group relative p-5 rounded-3xl glass-card hover:bg-surface-900/80 cursor-pointer transition-all duration-300 hover:shadow-glow-sm hover:-translate-y-0.5 border border-slate-800/80"
     >
       <div className="flex items-start justify-between mb-4">

@@ -33,6 +33,8 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(input),
       }),
+    getGoogleAuthUrl: () =>
+      apiFetch<{ url: string | null; isConfigured: boolean; message?: string }>('/auth/google'),
   },
 
   // Accounts

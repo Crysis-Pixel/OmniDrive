@@ -144,11 +144,11 @@ export class UploadService {
 
       // Update account quota usage
       const account = await db.linkedAccount.findUnique({ where: { id: session.accountId } });
-      if (account && account.quotaUsage) {
+      if (account) {
         await db.linkedAccount.update({
           where: { id: session.accountId },
           data: {
-            quotaUsage: BigInt(account.quotaUsage) + BigInt(session.totalSize),
+            quotaUsage: BigInt(account.quotaUsage || 0) + BigInt(session.totalSize),
             quotaUsageInDrive: BigInt(account.quotaUsageInDrive || 0) + BigInt(session.totalSize),
           },
         });

@@ -114,7 +114,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           <div className="mb-6">
             <h2 className="text-xl font-extrabold text-white tracking-tight">Linked Drives</h2>
             <p className="text-xs text-slate-400 mt-1">
-              Double click on any drive to explore its folders and files, or upload directly to auto-distribute.
+              Click on any drive to explore its folders and files, or upload directly to auto-distribute.
             </p>
           </div>
 
@@ -126,17 +126,29 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             {/* Add Account Card */}
             <div
               onClick={() => openModal('linkAccount')}
-              className="p-6 rounded-3xl border border-dashed border-slate-700/80 hover:border-brand-500/50 bg-surface-900/20 hover:bg-brand-500/5 cursor-pointer flex flex-col items-center justify-center text-center group transition-all duration-200 min-h-[170px]"
+              className={`p-6 rounded-3xl border border-dashed border-slate-700/80 hover:border-brand-500/50 bg-surface-900/20 hover:bg-brand-500/5 cursor-pointer flex flex-col items-center justify-center text-center group transition-all duration-200 ${
+                items.length === 0 ? 'col-span-full py-12 min-h-[220px]' : 'min-h-[170px]'
+              }`}
             >
-              <div className="w-12 h-12 rounded-2xl bg-surface-900 border border-slate-700 flex items-center justify-center text-slate-400 group-hover:text-brand-400 group-hover:scale-105 transition-all mb-3 shadow-sm">
-                <Plus className="w-6 h-6" />
+              <div className="w-14 h-14 rounded-2xl bg-surface-900 border border-slate-700 flex items-center justify-center text-slate-400 group-hover:text-brand-400 group-hover:scale-105 transition-all mb-4 shadow-sm">
+                <Plus className="w-7 h-7" />
               </div>
-              <div className="font-semibold text-sm text-slate-300 group-hover:text-white">
-                Link Another Drive
+              <div className="font-bold text-base text-slate-200 group-hover:text-white">
+                {items.length === 0 ? 'Link Your Google Drive Account' : 'Link Another Drive'}
               </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">
-                Add another Google Drive account
+              <div className="text-xs text-slate-400 mt-1 max-w-sm">
+                {items.length === 0
+                  ? 'Connect your personal or workspace Google Drive to start browsing, uploading, and managing your files.'
+                  : 'Add another Google Drive account to expand your unified storage.'}
               </div>
+              {items.length === 0 && (
+                <button
+                  type="button"
+                  className="btn-primary py-2 px-5 text-xs font-semibold mt-4 pointer-events-none"
+                >
+                  <span>Connect Google Drive</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -5,7 +5,7 @@ services:
   - type: web
     name: omnidrive-app
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: npm install && npm run build
     preDeployCommand: npm run prisma:deploy
@@ -24,11 +24,6 @@ services:
         fromDatabase:
           name: omnidrive-postgres
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: omnidrive-redis
-          property: connectionString
       - key: SESSION_SECRET
         generateValue: true
       - key: TOKEN_ENCRYPTION_KEY
@@ -40,49 +35,16 @@ services:
       - key: GOOGLE_REDIRECT_URI
         sync: false
       - key: GOOGLE_SCOPES
-        value: "https://www.googleapis.com/auth/drive"
+        value: "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid"
       - key: ENABLE_DEMO_ACCOUNTS
         value: "true"
-
-  # --------------------------------------------------------------------------
-  # 2. Optional Dedicated Background Worker (For high-scale transfers)
-  # --------------------------------------------------------------------------
-  - type: worker
-    name: omnidrive-worker
-    runtime: node
-    plan: starter
-    region: oregon
-    buildCommand: npm install && npm run build
-    startCommand: npm run start:worker
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: omnidrive-postgres
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: omnidrive-redis
-          property: connectionString
-      - key: TOKEN_ENCRYPTION_KEY
-        fromService:
-          type: web
-          name: omnidrive-app
-          envVarKey: TOKEN_ENCRYPTION_KEY
 
 databases:
   # --------------------------------------------------------------------------
   # Render PostgreSQL Database
   # --------------------------------------------------------------------------
   - name: omnidrive-postgres
-    plan: starter
+    plan: free
     region: oregon
     databaseName: omnidrive
     user: omnidrive_user
-
-# --------------------------------------------------------------------------
-# Render Redis / KeyDB Cache & Queue
-# --------------------------------------------------------------------------
-# Note: Render Redis service definition

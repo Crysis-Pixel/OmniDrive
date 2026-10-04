@@ -27,6 +27,27 @@ export const AccountsPage: React.FC = () => {
   const [editingLabel, setEditingLabel] = useState('');
   const [syncingId, setSyncingId] = useState<string | null>(null);
 
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('error');
+    const succ = params.get('success');
+    if (err) return { type: 'error', message: err };
+    if (succ) return { type: 'success', message: succ };
+    return null;
+  });
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('success')) {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['storage'] });
+      queryClient.invalidateQueries({ queryKey: ['nodes'] });
+    }
+    if (params.has('error') || params.has('success')) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [queryClient]);
+
   const { data: storageData, isLoading: isStorageLoading } = useQuery<StorageSummaryResponse>({
     queryKey: ['storage'],
     queryFn: api.storage.getSummary,
@@ -75,6 +96,37 @@ export const AccountsPage: React.FC = () => {
 
   return (
     <div className="flex-1 p-8 overflow-y-auto max-w-6xl mx-auto space-y-8">
+      {/* OAuth Action Notification */}
+      {notification && (
+        <div
+          className={`p-4 rounded-2xl flex items-start justify-between gap-3 shadow-lg transition-all ${
+            notification.type === 'success'
+              ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-200'
+              : 'bg-rose-500/15 border border-rose-500/30 text-rose-200'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            {notification.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            )}
+            <div>
+              <p className="text-sm font-semibold">
+                {notification.type === 'success' ? 'Google Drive Linked!' : 'Could Not Link Google Drive'}
+              </p>
+              <p className="text-xs mt-0.5 opacity-90 leading-relaxed">{notification.message}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-xs px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors font-medium shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>

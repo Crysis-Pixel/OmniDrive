@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
 import { config } from './config';
 
 // Primary Prisma Client for PostgreSQL (Used on Render & Production)
@@ -6,7 +8,7 @@ export const prisma = new PrismaClient({
   log: config.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
 });
 
-// In-Memory Database store for tests and zero-setup local development
+// In-Memory Database store with disk persistence for local development
 class MemoryStore {
   private _users = new Map<string, any>();
   private _userSettings = new Map<string, any>();
@@ -15,6 +17,98 @@ class MemoryStore {
   private _transferJobs = new Map<string, any>();
 
   private idCounter = 1;
+  private filePath: string;
+  private saveTimeout: NodeJS.Timeout | null = null;
+
+  constructor() {
+    this.filePath = path.resolve(__dirname, '../../../.omnidrive_local_db.json');
+    this.loadFromDisk();
+  }
+
+  private loadFromDisk() {
+    try {
+      if (fs.existsSync(this.filePath)) {
+        const raw = fs.readFileSync(this.filePath, 'utf8');
+        const data = JSON.parse(raw);
+        if (Array.isArray(data.users)) {
+          data.users.forEach((item: any) => this._users.set(item.id, { ...item, createdAt: new Date(item.createdAt) }));
+        }
+        if (Array.isArray(data.userSettings)) {
+          data.userSettings.forEach((item: any) => this._userSettings.set(item.userId, item));
+        }
+        if (Array.isArray(data.linkedAccounts)) {
+          data.linkedAccounts.forEach((item: any) => {
+            this._linkedAccounts.set(item.id, {
+              ...item,
+              lastSyncAt: item.lastSyncAt ? new Date(item.lastSyncAt) : null,
+              quotaLimit: item.quotaLimit != null ? BigInt(item.quotaLimit) : null,
+              quotaUsage: item.quotaUsage != null ? BigInt(item.quotaUsage) : null,
+              quotaUsageInDrive: item.quotaUsageInDrive != null ? BigInt(item.quotaUsageInDrive) : null,
+              quotaUsageInTrash: item.quotaUsageInTrash != null ? BigInt(item.quotaUsageInTrash) : null,
+            });
+          });
+        }
+        if (Array.isArray(data.fileNodes)) {
+          data.fileNodes.forEach((item: any) => {
+            this._fileNodes.set(item.id, {
+              ...item,
+              modifiedTime: item.modifiedTime ? new Date(item.modifiedTime) : new Date(),
+              syncedAt: item.syncedAt ? new Date(item.syncedAt) : new Date(),
+              size: item.size != null ? BigInt(item.size) : null,
+            });
+          });
+        }
+        if (Array.isArray(data.transferJobs)) {
+          data.transferJobs.forEach((item: any) => {
+            this._transferJobs.set(item.id, {
+              ...item,
+              createdAt: new Date(item.createdAt),
+              updatedAt: new Date(item.updatedAt),
+              bytesTotal: item.bytesTotal != null ? BigInt(item.bytesTotal) : null,
+              bytesDone: item.bytesDone != null ? BigInt(item.bytesDone) : BigInt(0),
+            });
+          });
+        }
+        if (data.idCounter) {
+          this.idCounter = data.idCounter + 1;
+        }
+      }
+    } catch (err) {
+      console.warn('Notice: Could not load local db cache, starting fresh:', err);
+    }
+  }
+
+  saveToDisk() {
+    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+    this.saveTimeout = setTimeout(() => {
+      try {
+        const payload = {
+          idCounter: this.idCounter,
+          users: Array.from(this._users.values()),
+          userSettings: Array.from(this._userSettings.values()),
+          linkedAccounts: Array.from(this._linkedAccounts.values()).map(a => ({
+            ...a,
+            quotaLimit: a.quotaLimit ? a.quotaLimit.toString() : null,
+            quotaUsage: a.quotaUsage ? a.quotaUsage.toString() : null,
+            quotaUsageInDrive: a.quotaUsageInDrive ? a.quotaUsageInDrive.toString() : null,
+            quotaUsageInTrash: a.quotaUsageInTrash ? a.quotaUsageInTrash.toString() : null,
+          })),
+          fileNodes: Array.from(this._fileNodes.values()).map(f => ({
+            ...f,
+            size: f.size ? f.size.toString() : null,
+          })),
+          transferJobs: Array.from(this._transferJobs.values()).map(j => ({
+            ...j,
+            bytesTotal: j.bytesTotal ? j.bytesTotal.toString() : null,
+            bytesDone: j.bytesDone ? j.bytesDone.toString() : '0',
+          })),
+        };
+        fs.writeFileSync(this.filePath, JSON.stringify(payload, null, 2), 'utf8');
+      } catch (err) {
+        console.warn('Notice: Failed saving local db cache to disk:', err);
+      }
+    }, 150);
+  }
 
   private nextId(prefix: string) {
     return `${prefix}_${Date.now()}_${this.idCounter++}`;
@@ -45,6 +139,7 @@ class MemoryStore {
           update: data.settings.create,
         });
       }
+      this.saveToDisk();
       return { ...record };
     },
     update: async ({ where, data }: { where: { id: string }; data: any }) => {
@@ -52,6 +147,7 @@ class MemoryStore {
       if (!u) throw new Error('User not found');
       const updated = { ...u, ...data };
       this._users.set(where.id, updated);
+      this.saveToDisk();
       return { ...updated };
     },
   };
@@ -66,6 +162,7 @@ class MemoryStore {
       if (existing) {
         const updated = { ...existing, ...update };
         this._userSettings.set(where.userId, updated);
+        this.saveToDisk();
         return { ...updated };
       } else {
         const record = {
@@ -74,6 +171,7 @@ class MemoryStore {
           accountPriority: create.accountPriority || [],
         };
         this._userSettings.set(where.userId, record);
+        this.saveToDisk();
         return { ...record };
       }
     },
@@ -119,23 +217,25 @@ class MemoryStore {
         status: data.status || 'active',
         changesPageToken: data.changesPageToken || null,
         lastSyncAt: data.lastSyncAt || new Date(),
-        quotaLimit: data.quotaLimit !== undefined ? BigInt(data.quotaLimit) : null,
-        quotaUsage: data.quotaUsage !== undefined ? BigInt(data.quotaUsage) : null,
-        quotaUsageInDrive: data.quotaUsageInDrive !== undefined ? BigInt(data.quotaUsageInDrive) : null,
-        quotaUsageInTrash: data.quotaUsageInTrash !== undefined ? BigInt(data.quotaUsageInTrash) : null,
+        quotaLimit: data.quotaLimit != null ? BigInt(data.quotaLimit) : null,
+        quotaUsage: data.quotaUsage != null ? BigInt(data.quotaUsage) : null,
+        quotaUsageInDrive: data.quotaUsageInDrive != null ? BigInt(data.quotaUsageInDrive) : null,
+        quotaUsageInTrash: data.quotaUsageInTrash != null ? BigInt(data.quotaUsageInTrash) : null,
       };
       this._linkedAccounts.set(id, record);
+      this.saveToDisk();
       return { ...record };
     },
     update: async ({ where, data }: { where: { id: string }; data: any }) => {
       const a = this._linkedAccounts.get(where.id);
       if (!a) throw new Error('Account not found');
       const updated = { ...a, ...data };
-      if (data.quotaLimit !== undefined) updated.quotaLimit = data.quotaLimit !== null ? BigInt(data.quotaLimit) : null;
-      if (data.quotaUsage !== undefined) updated.quotaUsage = data.quotaUsage !== null ? BigInt(data.quotaUsage) : null;
-      if (data.quotaUsageInDrive !== undefined) updated.quotaUsageInDrive = data.quotaUsageInDrive !== null ? BigInt(data.quotaUsageInDrive) : null;
-      if (data.quotaUsageInTrash !== undefined) updated.quotaUsageInTrash = data.quotaUsageInTrash !== null ? BigInt(data.quotaUsageInTrash) : null;
+      if (data.quotaLimit !== undefined) updated.quotaLimit = data.quotaLimit != null ? BigInt(data.quotaLimit) : null;
+      if (data.quotaUsage !== undefined) updated.quotaUsage = data.quotaUsage != null ? BigInt(data.quotaUsage) : null;
+      if (data.quotaUsageInDrive !== undefined) updated.quotaUsageInDrive = data.quotaUsageInDrive != null ? BigInt(data.quotaUsageInDrive) : null;
+      if (data.quotaUsageInTrash !== undefined) updated.quotaUsageInTrash = data.quotaUsageInTrash != null ? BigInt(data.quotaUsageInTrash) : null;
       this._linkedAccounts.set(where.id, updated);
+      this.saveToDisk();
       return { ...updated };
     },
     delete: async ({ where }: { where: { id: string } }) => {
@@ -147,6 +247,7 @@ class MemoryStore {
           this._fileNodes.delete(key);
         }
       }
+      this.saveToDisk();
       return a;
     },
   };
@@ -222,6 +323,7 @@ class MemoryStore {
         const updated = { ...existingNode, ...update, syncedAt: new Date() };
         if (update.size !== undefined) updated.size = update.size !== null ? BigInt(update.size) : null;
         this._fileNodes.set(existingNode.id, updated);
+        this.saveToDisk();
         return { ...updated };
       } else {
         const id = this.nextId('node');
@@ -244,6 +346,7 @@ class MemoryStore {
           syncedAt: new Date(),
         };
         this._fileNodes.set(id, record);
+        this.saveToDisk();
         return { ...record };
       }
     },
@@ -263,11 +366,13 @@ class MemoryStore {
       const updated = { ...f, ...data, syncedAt: new Date() };
       if (data.size !== undefined) updated.size = data.size !== null ? BigInt(data.size) : null;
       this._fileNodes.set(targetId, updated);
+      this.saveToDisk();
       return { ...updated };
     },
     delete: async ({ where }: { where: { id: string } }) => {
       const f = this._fileNodes.get(where.id);
       this._fileNodes.delete(where.id);
+      this.saveToDisk();
       return f;
     },
     deleteMany: async ({ where }: { where: any }) => {
@@ -278,6 +383,7 @@ class MemoryStore {
         this._fileNodes.delete(key);
         count++;
       }
+      this.saveToDisk();
       return { count };
     },
   };
@@ -309,22 +415,24 @@ class MemoryStore {
         dstAccount: data.dstAccount,
         dstParentId: data.dstParentId,
         status: data.status || 'queued',
-        bytesTotal: data.bytesTotal !== undefined && data.bytesTotal !== null ? BigInt(data.bytesTotal) : null,
-        bytesDone: data.bytesDone !== undefined ? BigInt(data.bytesDone) : BigInt(0),
+        bytesTotal: data.bytesTotal != null ? BigInt(data.bytesTotal) : null,
+        bytesDone: data.bytesDone != null ? BigInt(data.bytesDone) : BigInt(0),
         error: data.error || null,
         createdAt: now,
         updatedAt: now,
       };
       this._transferJobs.set(id, record);
+      this.saveToDisk();
       return { ...record };
     },
     update: async ({ where, data }: { where: { id: string }; data: any }) => {
       const j = this._transferJobs.get(where.id);
       if (!j) throw new Error('TransferJob not found');
       const updated = { ...j, ...data, updatedAt: new Date() };
-      if (data.bytesTotal !== undefined) updated.bytesTotal = data.bytesTotal !== null ? BigInt(data.bytesTotal) : null;
-      if (data.bytesDone !== undefined) updated.bytesDone = BigInt(data.bytesDone);
+      if (data.bytesTotal !== undefined) updated.bytesTotal = data.bytesTotal != null ? BigInt(data.bytesTotal) : null;
+      if (data.bytesDone !== undefined) updated.bytesDone = data.bytesDone != null ? BigInt(data.bytesDone) : BigInt(0);
       this._transferJobs.set(where.id, updated);
+      this.saveToDisk();
       return { ...updated };
     },
   };

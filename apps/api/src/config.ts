@@ -19,7 +19,13 @@ export const config = {
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/accounts/callback',
-  GOOGLE_SCOPES: (process.env.GOOGLE_SCOPES || 'https://www.googleapis.com/auth/drive').split(' '),
+  GOOGLE_SCOPES: Array.from(new Set([
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'openid',
+    ...(process.env.GOOGLE_SCOPES || '').split(' ').filter(Boolean),
+  ])),
   
   UPLOAD_CHUNK_BYTES: parseInt(process.env.UPLOAD_CHUNK_BYTES || '8388608', 10), // 8MB default
   SYNC_INTERVAL_SECONDS: parseInt(process.env.SYNC_INTERVAL_SECONDS || '120', 10),

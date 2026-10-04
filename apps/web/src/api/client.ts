@@ -22,6 +22,12 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
     headers.set('Content-Type', 'application/json');
   }
 
+  // Attach stored JWT session token if available
+  const storedToken = typeof window !== 'undefined' ? localStorage.getItem('omnidrive_token') : null;
+  if (storedToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${storedToken}`);
+  }
+
   const res = await fetch(url, {
     ...options,
     headers,

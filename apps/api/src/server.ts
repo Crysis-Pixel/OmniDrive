@@ -15,6 +15,7 @@ import { storageRoutes } from './routes/storage.routes';
 import { searchRoutes } from './routes/search.routes';
 import { eventsRoutes } from './routes/events.routes';
 import { syncService } from './services/sync.service';
+import { authService } from './services/auth.service';
 
 // Ensure BigInt serializes cleanly to string in JSON responses
 (BigInt.prototype as any).toJSON = function () {
@@ -29,6 +30,9 @@ export async function createServer(): Promise<FastifyInstance> {
 
   // Check database connection
   await checkDatabaseConnection();
+
+  // Pre-seed demo user if needed
+  await authService.ensureDefaultDemoUser();
 
   // Add raw body parser for binary file uploads and PUT content
   app.addContentTypeParser('*', { parseAs: 'buffer' }, (req, body, done) => {

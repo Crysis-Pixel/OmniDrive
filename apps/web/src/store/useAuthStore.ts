@@ -11,6 +11,7 @@ interface AuthState {
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
   updateSettings: (input: UpdateSettingsInput) => Promise<void>;
+  clearError: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -18,12 +19,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   error: null,
 
+  clearError: () => set({ error: null }),
+
   checkAuth: async () => {
     try {
       set({ isLoading: true, error: null });
       const { user } = await api.auth.me();
       set({ user, isLoading: false });
     } catch {
+      localStorage.removeItem('omnidrive_token');
       set({ user: null, isLoading: false });
     }
   },
@@ -31,7 +35,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (input: LoginInput) => {
     set({ isLoading: true, error: null });
     try {
-      const { user } = await api.auth.login(input);
+      const { user, token } = await api.auth.login(input);
+      if (token) {
+        localStorage.setItem('omnidrive_token', token);
+      }
       set({ user, isLoading: false });
     } catch (err: any) {
       set({ error: err.message, isLoading: false });
@@ -42,7 +49,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (input: RegisterInput) => {
     set({ isLoading: true, error: null });
     try {
-      const { user } = await api.auth.register(input);
+      const { user, token } = await api.auth.register(input);
+      if (token) {
+        localStorage.setItem('omnidrive_token', token);
+      }
       set({ user, isLoading: false });
     } catch (err: any) {
       set({ error: err.message, isLoading: false });
@@ -51,8 +61,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    await api.auth.logout();
-    set({ user: null });
+    try {
+      await api.auth.logout();
+    } finally {
+      localStorage.removeItem('omnidrive_token');
+      set({ user: null });
+    }
   },
 
   updateSettings: async (input: UpdateSettingsInput) => {

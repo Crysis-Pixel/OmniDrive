@@ -8,3 +8,4 @@ build/
 coverage/
 .prisma/client/
 .system_generated/
+.omnidrive_local_db.json

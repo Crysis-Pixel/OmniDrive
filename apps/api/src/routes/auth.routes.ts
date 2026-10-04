@@ -1,9 +1,12 @@
 import { FastifyInstance } from 'fastify';
+import { google } from 'googleapis';
+import crypto from 'crypto';
 import { registerSchema, loginSchema, updateSettingsSchema } from '@omnidrive/shared';
 import { authService } from '../services/auth.service';
 import { requireAuth } from '../middleware/auth.middleware';
 import { db } from '../db';
 import { config } from '../config';
+import { oauthStates } from './accounts.routes';
 
 export async function authRoutes(fastify: FastifyInstance) {
   // POST /api/auth/register
@@ -114,5 +117,37 @@ export async function authRoutes(fastify: FastifyInstance) {
     });
 
     return { settings: updated };
+  });
+
+  // GET /api/auth/google - Initiate Google Sign-In / Sign-Up
+  fastify.get('/google', async () => {
+    if (!config.GOOGLE_CLIENT_ID || !config.GOOGLE_CLIENT_SECRET) {
+      return {
+        url: null,
+        isConfigured: false,
+        message: 'Google Cloud Client credentials not configured in .env',
+      };
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      config.GOOGLE_CLIENT_ID,
+      config.GOOGLE_CLIENT_SECRET,
+      config.GOOGLE_REDIRECT_URI
+    );
+
+    const state = `login_${crypto.randomBytes(24).toString('hex')}`;
+    oauthStates.set(state, { isLogin: true, timestamp: Date.now() });
+
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: config.GOOGLE_SCOPES,
+      state,
+    });
+
+    return {
+      url: authUrl,
+      isConfigured: true,
+    };
   });
 }
