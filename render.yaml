@@ -11,6 +11,8 @@ services:
     startCommand: npm run prisma:deploy && npm start
     healthCheckPath: /api/health
     envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
       - key: NPM_CONFIG_PRODUCTION
         value: "false"
       - key: NODE_ENV
