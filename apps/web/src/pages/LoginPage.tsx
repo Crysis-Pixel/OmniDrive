@@ -38,8 +38,8 @@ export const LoginPage: React.FC = () => {
 
         {/* Brand Header */}
         <div className="flex items-center gap-3 relative z-10">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-sky-400 flex items-center justify-center shadow-glow">
-            <Cloud className="w-6 h-6 text-white" />
+          <div className="w-11 h-11 rounded-2xl bg-surface-900 border border-slate-700/60 p-1.5 flex items-center justify-center shadow-glow">
+            <img src="/logo.svg" alt="OmniDrive" className="w-full h-full object-contain" />
           </div>
           <div>
             <span className="font-extrabold text-xl tracking-tight text-white">OmniDrive</span>

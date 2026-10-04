@@ -49,8 +49,8 @@ export const Sidebar: React.FC = () => {
           onClick={() => navigate('/')}
           className="flex items-center gap-3 cursor-pointer group"
         >
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-sky-400 flex items-center justify-center shadow-glow group-hover:scale-105 transition-transform duration-200">
-            <Cloud className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-2xl bg-surface-900 border border-slate-700/60 p-1 flex items-center justify-center shadow-glow group-hover:scale-105 transition-transform duration-200">
+            <img src="/logo.svg" alt="OmniDrive" className="w-full h-full object-contain" />
           </div>
           <div>
             <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-200 bg-clip-text text-transparent">
